@@ -1,0 +1,16 @@
+<?php
+
+/**
+ * Implements hook_install().
+ */
+function achat_install() {
+  drupal_set_message(t('You need to do some ' . l('config', 'admin/config/achat/config') . ' for achat module.'));
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function achat_uninstall() {
+  variable_del('achat_settings');
+  variable_del('achat_blocks_settings');
+}

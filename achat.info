@@ -1,0 +1,11 @@
+name = A Chat
+description = A drupal nodejs chat
+core = 7.x
+
+dependencies[] = nodejs
+;dependencies[] = centity
+dependencies[] = cdialog
+
+files[] = includes/Achat.inc
+
+configure = admin/config/achat

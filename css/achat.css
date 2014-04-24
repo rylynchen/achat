@@ -1,0 +1,48 @@
+.achat .user-list {
+  background: #FAFAFA;
+  border: 1px solid #CCCCCC;
+  float: right;
+  height: 220px;
+  overflow: auto;
+  padding: 0 5px;
+  width: 200px;
+}
+.achat .user-list ul {
+  padding: 0;
+}
+.achat .user-list ul li {
+  list-style-type: none;
+}
+.achat .user-list ul li span.username {
+  font-size: 14px;
+  line-height: 28px;
+  margin-left: 5px;
+  vertical-align: top;
+}
+.achat .user-list ul li .form-item {float:right;}
+.achat .chat-log {
+  border: 1px solid #CCCCCC;
+  border-width: 1px 0px;
+  height: 220px;
+  margin-top: 10px;
+  overflow: auto;
+  padding-right: 5px;
+}
+.achat-message {
+  clear: both;
+}
+.achat .chat-log .message-content {
+  float: left;
+  width: 90%;
+}
+.achat .chat-log .message-author {
+  font-weight: bold;
+}
+.achat .chat-log .message-time {
+  color: #858585;
+  float: right;
+  font-size: 12px;
+}
+
+/* form */
+.achat_form .form-actions {margin:0;}

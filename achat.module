@@ -1,0 +1,681 @@
+<?php
+
+/**
+ * Implements hook_menu().
+ */
+function achat_menu() {
+  $items['admin/config/achat'] = array(
+    'title' => 'Achat',
+    'description' => 'Configure achat module.',
+    'position' => 'right',
+    'weight' => -20,
+    'page callback' => 'system_admin_menu_block_page',
+    'access arguments' => array('access administration pages'),
+    'file' => 'system.admin.inc',
+    'file path' => drupal_get_path('module', 'system'),
+  );
+  $items['admin/config/achat/config'] = array(
+    'title' => 'Configuration',
+    'description' => 'Adjust achat settings.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('achat_settings_form'),
+    'access arguments' => array('administer site configuration'),
+    'file' => 'achat.admin.inc',
+  );
+  $items['achat/ajax/form-add-user'] = array(
+    'page callback' => 'achat_ajax_form_add_user_callback',
+    'access callback' => 'user_is_logged_in',
+    'type' => MENU_CALLBACK,
+  );
+  return $items;
+}
+
+/**
+ * Implements hook_block_info().
+ */
+function achat_block_info() {
+  $blocks = array();
+  $settings = achat_settings();
+  if (isset($settings['blocks']) && is_array($settings['blocks'])) {
+    foreach ($settings['blocks'] as $key => $title) {
+      $blocks['achat-' . $key] = array(
+        'info' => 'Achat - ' . $title,
+        'cache' => DRUPAL_NO_CACHE,
+      );
+    }
+  }
+  return $blocks;
+}
+
+/**
+ * Achat tokens.
+ *
+ * @param $type
+ */
+function _achat_tokens($type = NULL) {
+  $tokens = array(
+    'upload_location' => array(
+      'channel' => '[channel]',
+      'ymd' => '[Y-m-d]',
+    ),
+  );
+  if($type) {
+    return isset($tokens[$type]) ? $tokens[$type] : array();
+  } else {
+    return $tokens;
+  }
+}
+
+/**
+ * Achat tokens description.
+ *
+ * @param $type
+ */
+function _achat_tokens_desc($type) {
+  $tokens = _achat_tokens();
+  $desc = array(
+    'upload_location' => array(
+      'channel' => t('频道：%n', array('%n' => $tokens['upload_location']['channel'])),
+      'ymd' => t('年月日：%n', array('%n' => $tokens['upload_location']['ymd'])),
+    ),
+  );
+  return isset($desc[$type]) ? $desc[$type] : array();
+}
+
+/**
+ * Implements hook_block_configure().
+ */
+function achat_block_configure($delta = '') {
+  $form = array();
+  $type = _achat_block_type($delta);
+  if ($type !== FALSE) {
+    $blocks_settings = achat_settings('blocks');
+    $default_settings = _achat_block_default_configure();
+    $form['achat'] = array(
+      '#type' => 'fieldset',
+      '#title' => t('Achat'),
+      '#tree' => TRUE,
+    );
+    $form['achat']['upload'] = array(
+      '#type' => 'fieldset',
+      '#title' => t('上传'),
+      '#collapsible' => TRUE,
+      '#collapsed' => FALSE,
+      '#tree' => TRUE,
+    );
+    $form['achat']['upload']['upload_location'] = array(
+      '#type' => 'textfield',
+      '#title' => t('文件存储路径'),
+      '#prefix' => theme('item_list', array('items' => _achat_tokens_desc('upload_location'))),
+      '#default_value' => isset($blocks_settings[$type]['upload']['upload_location']) ? $blocks_settings[$type]['upload']['upload_location'] : $default_settings['upload']['upload_location'],
+    );
+    $form['achat']['upload']['image'] = array(
+      '#type' => 'checkbox',
+      '#title' => t('图片'),
+      '#default_value' => isset($blocks_settings[$type]['upload']['image']) ? $blocks_settings[$type]['upload']['image'] : $default_settings['upload']['image'],
+    );
+    $form['achat']['upload']['image_extensions'] = array(
+      '#type' => 'textfield',
+      '#title' => t('允许的图片后缀名'),
+      '#description' => t('多个之间以空格分割'),
+      '#default_value' => isset($blocks_settings[$type]['upload']['image_extensions']) ? $blocks_settings[$type]['upload']['image_extensions'] : $default_settings['upload']['image_extensions'],
+      '#states' => array(
+        'visible' => array(
+          'input[name="achat[upload][image]"]' => array('checked' => TRUE),
+        ),
+      ),
+    );
+    $form['achat']['upload']['image_preview'] = array(
+      '#type' => 'fieldset',
+      '#title' => t('显示'),
+      '#collapsible' => TRUE,
+      '#collapsed' => FALSE,
+      '#tree' => TRUE,
+      '#states' => array(
+        'visible' => array(
+          'input[name="achat[upload][image]"]' => array('checked' => TRUE),
+        ),
+      ),
+    );
+    $form['achat']['upload']['image_preview']['width'] = array(
+      '#type' => 'textfield',
+      '#title' => t('宽度'),
+      '#default_value' => isset($blocks_settings[$type]['upload']['image_preview']['width']) ? $blocks_settings[$type]['upload']['image_preview']['width'] : $default_settings['upload']['image_preview']['width'],
+      '#size' => 20,
+    );
+    $form['achat']['upload']['image_preview']['height'] = array(
+      '#type' => 'textfield',
+      '#title' => t('高度'),
+      '#default_value' => isset($blocks_settings[$type]['upload']['image_preview']['height']) ? $blocks_settings[$type]['upload']['image_preview']['height'] : $default_settings['upload']['image_preview']['height'],
+      '#size' => 20,
+    );
+    $form['achat']['upload']['video'] = array(
+      '#type' => 'checkbox',
+      '#title' => t('视频'),
+      '#default_value' => isset($blocks_settings[$type]['upload']['video']) ? $blocks_settings[$type]['upload']['video'] : $default_settings['upload']['video'],
+    );
+    $form['achat']['upload']['video_extensions'] = array(
+      '#type' => 'textfield',
+      '#title' => t('允许的视频后缀名'),
+      '#description' => t('多个之间以空格分割'),
+      '#default_value' => isset($blocks_settings[$type]['upload']['video_extensions']) ? $blocks_settings[$type]['upload']['video_extensions'] : $default_settings['upload']['video_extensions'],
+      '#states' => array(
+        'visible' => array(
+          'input[name="achat[upload][video]"]' => array('checked' => TRUE),
+        ),
+      ),
+    );
+    $form['achat']['upload']['doc'] = array(
+      '#type' => 'checkbox',
+      '#title' => t('文档'),
+      '#default_value' => isset($blocks_settings[$type]['upload']['doc']) ? $blocks_settings[$type]['upload']['doc'] : $default_settings['upload']['doc'],
+    );
+    $form['achat']['upload']['doc_extensions'] = array(
+      '#type' => 'textfield',
+      '#title' => t('允许的文档后缀名'),
+      '#description' => t('多个之间以空格分割'),
+      '#default_value' => isset($blocks_settings[$type]['upload']['doc_extensions']) ? $blocks_settings[$type]['upload']['doc_extensions'] : $default_settings['upload']['doc_extensions'],
+      '#states' => array(
+        'visible' => array(
+          'input[name="achat[upload][doc]"]' => array('checked' => TRUE),
+        ),
+      ),
+    );
+    $form['achat']['db'] = array(
+      '#type' => 'fieldset',
+      '#title' => t('数据库'),
+      '#collapsible' => TRUE,
+      '#collapsed' => FALSE,
+      '#tree' => TRUE,
+    );
+    $form['achat']['db']['log'] = array(
+      '#type' => 'checkbox',
+      '#title' => t('存储聊天记录'),
+      '#default_value' => isset($blocks_settings[$type]['db']['log']) ? $blocks_settings[$type]['db']['log'] : $default_settings['db']['log'],
+    );
+  }
+  return $form;
+}
+
+/**
+ * Implements hook_block_save().
+ */
+function achat_block_save($delta = '', $edit = array()) {
+  $type = _achat_block_type($delta);
+  if ($type !== FALSE) {
+    $settings = achat_settings('blocks');
+    $settings[$type] = array(
+      'upload' => array(
+        'upload_location' => $edit['achat']['upload']['upload_location'],
+        'image' => $edit['achat']['upload']['image'],
+        'image_extensions' => $edit['achat']['upload']['image_extensions'],
+        'image_preview' => array('width' => $edit['achat']['upload']['image_preview']['width'], 'height' => $edit['achat']['upload']['image_preview']['height']),
+        'video' => $edit['achat']['upload']['video'],
+        'video_extensions' => $edit['achat']['upload']['video_extensions'],
+        'doc' => $edit['achat']['upload']['doc'],
+        'doc_extensions' => $edit['achat']['upload']['doc_extensions'],
+      ),
+      'db' => array(
+        'log' => $edit['achat']['db']['log'],
+      ),
+    );
+    variable_set('achat_blocks_settings', serialize($settings));
+  }
+}
+
+/**
+ * Implements hook_block_view().
+ */
+function achat_block_view($delta = '') {
+  $type = _achat_block_type($delta);
+  if ($type !== FALSE && user_is_logged_in()) {
+    $path = current_path();
+    $chat = new Achat($path, $type, array('configure' => _achat_block_configure($type)));
+    $block['content'] = $chat->render();
+    return $block;
+  }
+}
+
+/**
+ * Get system settings param.
+ *
+ * @param $type
+ */
+function achat_settings($type = NULL) {
+  switch ($type) {
+    case 'base':
+      $settings = variable_get('achat_settings', NULL);
+      break;
+    case 'blocks':
+      $settings = variable_get('achat_blocks_settings', NULL);
+      break;
+    default:
+      $settings = variable_get('achat_settings', NULL);
+      break;
+  }
+  return $settings ? unserialize($settings) : array();
+}
+
+/**
+ * Ajax callback for post message to a socket.io channel
+ *
+ * @param $block_type
+ *
+ * @param $channel
+ *
+ * @param $msg
+ *
+ * @param $to
+ */
+function _achat_send_message($block_type, $channel, array $data, array $to) {
+  global $user;
+  $configure = _achat_block_configure($block_type);
+  $message = (object) array(
+    'channel' => $channel,
+    'callback' => 'nodejsChatMessageHandler',
+    'data' => array(
+      'uid' => $user->uid,
+      'name' => $user->name,
+      'msg' => _achat_msg_render($data, $configure),
+      'to' => $to,
+    ),
+  );
+  nodejs_send_content_channel_message($message);
+}
+
+/**
+ * Rander message from array.
+ *
+ * @param $data
+ *
+ * @param $configure
+ */
+function _achat_msg_render($data, $configure) {
+  if (isset($data['type']) && isset($data['value'])) {
+    switch ($data['type']) {
+      case 'text':
+        $msg = $data['value'];
+        break;
+      case 'image':
+        $file = $data['value'];
+        $msg = l(
+          theme(
+            'image', 
+            array(
+              'path' => $file->uri, 
+              'width' => $configure['upload']['image_preview']['width'], 
+              'height' => $configure['upload']['image_preview']['height'], 
+            )
+          ), 
+          file_create_url($file->uri), 
+          array(
+            'html' => TRUE,
+            'attributes' => array(
+              'class' => array('colorbox'),
+              'rel' => array('gallery-all')
+            ),
+          )
+        );
+        break;
+      case 'video':
+        $file = $data['value'];
+        $msg = l($file->filename, file_create_url($file->uri), array('attributes' => array('target' => '_blank')));
+        break;
+      case 'doc':
+        $file = $data['value'];
+        $msg = l($file->filename, file_create_url($file->uri), array('attributes' => array('target' => '_blank')));
+        break;
+      default:
+        $msg = '';
+        break;
+    }
+  }
+  return $msg;
+}
+
+/**
+ * Get achat block type.
+ *
+ * @param $delta
+ */
+function _achat_block_type($delta) {
+  if (preg_match('/achat-(?P<key>[0-9]+)/', $delta, $matches)) {
+    $type = $matches['key'];
+    $settings = achat_settings();
+    if (isset($settings['blocks'][$type])) {
+      return $type;
+    }
+  }
+  return FALSE;
+}
+
+/**
+ * Get achat block defualt configure.
+ */
+function _achat_block_default_configure() {
+  return array(
+    'upload' => array(
+      'upload_location' => 'achat/[channel]/[Y-m-d]',
+      'image' => 0,
+      'image_extensions' => 'jpg',
+      'image_preview' => array('width' => '50px', 'height' => '50px'),
+      'video' => 0,
+      'video_extensions' => 'flv',
+      'doc' => 0,
+      'doc_extensions' => 'doc txt docx',
+    ),
+    'db' => array(
+      'log' => 0,
+    ),
+  );
+}
+
+/**
+ * Get a achat block configure.
+ *
+ * @param $type
+ */
+function _achat_block_configure($type) {
+  $blocks_settings = achat_settings('blocks');
+  return isset($blocks_settings[$type]) ? $blocks_settings[$type] + _achat_block_default_configure() : _achat_block_default_configure();
+}
+
+/**
+ * Form builder for achat post message.
+ *
+ * @param $channel
+ *
+ * @param $user_ids
+ */
+function achat_form($form, &$form_state, $channel, $user_ids = array(), $settings, $block_type) {
+  $form_state['settings'] = $settings;
+  $users_markup = '';
+  $form_state['channel'] = $channel;
+  $form_state['block_type'] = $block_type;
+  $form['#attributes']['class'] = 'achat_form';
+  $form['achat'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('咨询'),
+    '#attributes' => array(
+      'id' => 'achat_' . $channel,
+      'class' => array(
+        'achat',
+      ),
+    ),
+  );
+  $checkall = '<div style="margin-top:10px;">全选/全不选<span style="float:right;""><input id="user_checkall" type="checkbox" name="users_all" checked="checked" /></span></div>';
+  $form['achat']['users'] = array(
+    '#tree' => TRUE,
+    '#prefix' => '<div class="user-list">' . $checkall . '<ul>',
+    '#suffix' => '</ul></div>',
+  );
+
+  $users = user_load_multiple($user_ids);
+
+  foreach ($users as $user) {
+    $form['achat']['users'][$user->uid] = _achat_form_user_item($user);
+  }
+
+  $form['achat']['log'] = array(
+    '#markup' => '<div class="chat-log"></div>',
+  );
+  $form['achat']['textarea'] = array(
+    '#type' => 'textarea',
+    '#title' => t('信息: '),
+    '#rows' => 2,
+  );
+  $form['achat']['actions'] = array('#type' => 'actions');
+  $form['achat']['actions']['send'] = array(
+    '#type' => 'submit',
+    '#value' => t('发送'),
+    '#submit' => array('achat_form_send_submit'),
+    '#ajax' => array(
+      'callback' => 'achat_form_send_callback',
+      'progress' => array(
+        'type' => 'throbber',
+        'message' => '',
+      ), 
+    ),
+    '#validate' => array(),
+  );
+  if (isset($settings['configure']['upload']['image']) && $settings['configure']['upload']['image']) {
+    $form['achat']['actions']['image'] = array(
+      '#type' => 'submit',
+      '#value' => t('图片'),
+      '#ajax' => array(
+        'callback' => 'achat_form_upload_image_callback',
+        'progress' => array(
+          'type' => 'throbber',
+          'message' => '',
+        ), 
+      ),
+      '#validate' => array(),
+      '#attributes' => array('class' => cdialog_link_class()),
+    );
+  }
+  if (isset($settings['configure']['upload']['video']) && $settings['configure']['upload']['video']) {
+    $form['achat']['actions']['video'] = array(
+      '#type' => 'submit',
+      '#value' => t('视频'),
+      '#ajax' => array(
+        'callback' => 'achat_form_upload_video_callback',
+        'progress' => array(
+          'type' => 'throbber',
+          'message' => '',
+        ), 
+      ),
+      '#validate' => array(),
+      '#attributes' => array('class' => cdialog_link_class()),
+    );
+  }
+  if (isset($settings['configure']['upload']['doc']) && $settings['configure']['upload']['doc']) {
+    $form['achat']['actions']['doc'] = array(
+      '#type' => 'submit',
+      '#value' => t('文档'),
+      '#ajax' => array(
+        'callback' => 'achat_form_upload_doc_callback',
+        'progress' => array(
+          'type' => 'throbber',
+          'message' => '',
+        ), 
+      ),
+      '#validate' => array(),
+      '#attributes' => array('class' => cdialog_link_class()),
+    );
+  }
+  return $form;
+}
+
+/**
+ * Achat form user item.
+ *
+ * @param $user
+ */
+function _achat_form_user_item($user) {
+  $variables = array(
+    'path' => ($user->picture) ? $user->picture->uri : variable_get('user_picture_default', ''),
+    'height' => '35',
+    'width' => '35',
+    'alt' => 'avatar',
+  );
+  $avatar = theme('image', $variables);
+  return array(
+    '#type' => 'checkbox',
+    '#prefix' => '<li class="achat-user-box-' . $user->uid . '">' . $avatar . '<span class="username">' . $user->name . '</span>',
+    '#suffix' => '</li>',
+    '#default_value' => 1,
+  );
+}
+
+/**
+ * Ajax callback for add user.
+ */
+function achat_ajax_form_add_user_callback() {
+  $json = array('status' => 0);
+  if (isset($_POST['form_build_id']) && isset($_POST['uid'])) {
+    list($form, $form_state) = ajax_get_form();
+    if ($form) {
+      $json['status'] = 1;
+      $uid = intval($_POST['uid']);
+      $user = user_load($uid);
+      $form['achat']['users'][$uid] = _achat_form_user_item($user);
+      drupal_process_form($form['#form_id'], $form, $form_state);
+    }
+  }
+  drupal_json_output($json);
+  drupal_exit();
+}
+
+/**
+ * Submit handler for achat post message.
+ */
+function achat_form_send_submit($form, &$form_state) {
+  $data = array(
+    'type' => 'text',
+    'value' => trim($form_state['values']['textarea']),
+  );
+  $to = array();
+  foreach ($form_state['values']['users'] as $uid => $checked) {
+    if ($checked) {
+      $to[] = $uid;
+    }
+  }
+  _achat_send_message($form_state['block_type'], $form_state['channel'], $data, array_unique($to));
+}
+
+/**
+ * Ajax callback for post message.
+ */
+function achat_form_send_callback($form, &$form_state) {
+  $commands = array();
+  $commands[] = array(
+    'command' => 'achatCleanTextarea',
+    'data' => array('selector' => '#achat_' . $form_state['channel'] . ' textarea'),
+  );
+  return array('#type' => 'ajax', '#commands' => $commands);
+}
+
+/**
+ * Ajax callback for upload image.
+ */
+function achat_form_upload_image_callback($form, &$form_state) {
+  return array('#type' => 'ajax', '#commands' => achat_upload($form_state, 'image'));
+}
+
+/**
+ * Ajax callback for upload video.
+ */
+function achat_form_upload_video_callback($form, &$form_state) {
+  return array('#type' => 'ajax', '#commands' => achat_upload($form_state, 'video'));
+}
+
+/**
+ * Ajax callback for upload video.
+ */
+function achat_form_upload_doc_callback($form, &$form_state) {
+  return array('#type' => 'ajax', '#commands' => achat_upload($form_state, 'doc'));
+}
+
+/**
+ * Achat ajax upload file callback.
+ *
+ * @param $_form_state
+ *
+ * @param $upload_type
+ */
+function achat_upload($_form_state, $upload_type) {
+  ctools_include('modal');
+  ctools_include('ajax');
+  $to = array();
+  foreach ($_form_state['values']['users'] as $uid => $checked) {
+    if ($checked) {
+      $to[] = $uid; 
+    }
+  }
+  $form_state = array(
+    'ajax' => TRUE,
+    'block_type' => $_form_state['block_type'],
+    'channel' => $_form_state['channel'],
+    'upload_type' => $upload_type,
+    'block_configure' => _achat_block_configure($_form_state['block_type']),
+    'to' => $to,
+  );
+  $title = $upload_type == 'image' ? t('上传图片') : ($upload_type == 'video' ? t('上传视频') : t('上传文件'));
+  drupal_set_title($title);
+  return ctools_modal_form_wrapper('achat_upload_form', $form_state);
+}
+
+/**
+ * Form builder for achat upload file.
+ */
+function achat_upload_form($form, &$form_state) {
+  $upload_type = $form_state['upload_type'];
+  $extensions = $form_state['block_configure']['upload'][$upload_type . '_extensions'];
+  $form['#attributes']['class'][] = 'achat_upload_form';
+  $form['fid'] = array(
+    '#type' => 'managed_file',
+    '#default_value' => '',
+    '#upload_location' => achat_upload_location($form_state),
+    '#upload_validators' => array('file_validate_extensions' => array($extensions)),
+  );
+  $form['actions'] = array('#type' => 'actions');
+  $form['actions']['upload'] = array(
+    '#type' => 'submit',
+    '#value' => t('上传'),
+    '#submit' => array('achat_upload_form_submit'),
+    '#ajax' => array(
+      'callback' => 'achat_upload_form_ajax_callback',
+      'progress' => array(
+        'type' => 'throbber',
+        'message' => '',
+      ), 
+    ),
+  );
+  return $form;
+}
+
+/**
+ * Submit handler for achat upload file form.
+ */
+function achat_upload_form_submit($form, &$form_state) {
+  if ($form_state['values']['fid'] != 0) {
+    $file = file_load($form_state['values']['fid']);
+    $file->status = FILE_STATUS_PERMANENT;
+    file_save($file);
+
+    file_usage_add($file, 'achat', 'achat_image', 1);
+
+    $data = array(
+      'type' => $form_state['upload_type'],
+      'value' => $file
+    );
+    _achat_send_message($form_state['block_type'], $form_state['channel'], $data, $form_state['to']);
+  }
+}
+
+/**
+ * Ajax callback for upload submit.
+ */
+function achat_upload_form_ajax_callback($form, $form_state) {
+  ctools_include('modal');
+  ctools_include('ajax');
+  $output = array();
+  ctools_add_js('ajax-responder');
+  $output[] = ctools_modal_command_dismiss();
+  return array('#type' => 'ajax', '#commands' => $output);
+}
+
+/**
+ * Get achat upload location.
+ *
+ * @param $form_state
+ */
+function achat_upload_location($form_state) {
+  $tokens = _achat_tokens('upload_location');
+  $upload_location = str_replace(
+    $tokens, 
+    array($form_state['channel'], date('Y-m-d')), 
+    $form_state['block_configure']['upload']['upload_location']
+  );
+  return 'public://' . $upload_location;
+}
