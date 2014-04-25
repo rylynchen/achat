@@ -1,6 +1,7 @@
 name = A Chat
 description = A drupal nodejs chat
 core = 7.x
+package = Achat
 
 dependencies[] = nodejs
 ;dependencies[] = centity

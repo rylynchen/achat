@@ -13,9 +13,10 @@
 
         delete Drupal.ajax['edit-send'].options.beforeSerialize;
 
-        $('#user_checkall', this).click(Drupal.behaviors.achat.checkAll);
+        $('input[name="checkall"]', this).click(Drupal.behaviors.achat.checkAll);
 
-        $('.user-list ul .form-checkbox', this).click(Drupal.behaviors.achat.checkboxChanged);
+        $('.achat_form .user-list ul .form-checkbox').click(Drupal.behaviors.achat.checkboxChanged);
+
 
       });
 
@@ -37,7 +38,7 @@
           return false;
         }
       });
-      $('.achat_form #user_checkall').attr('checked', allchecked);
+      $('.achat_form input[name="checkall"]').attr('checked', allchecked);
     },
 
     addUser: function(message) {
@@ -54,7 +55,7 @@
       var ajax = new Drupal.ajax(false, false, ajax_settings);
       ajax.eventResponse(ajax, {});
 
-      var checkbox = '<input type="checkbox" class="form-checkbox" value="1" name="users[' + uid + ']" id="edit-users-' + uid + '" ' + (document.getElementById('user_checkall').checked ? 'checked="checked"' : '') + ' />';
+      var checkbox = '<input type="checkbox" class="form-checkbox" value="1" name="users[' + uid + ']" id="edit-users-' + uid + '" ' + (document.getElementById('edit-checkall').checked ? 'checked="checked"' : '') + ' />';
 
       var form_item = '<div class="form-item form-type-checkbox form-item-users-' + uid + '">' + checkbox + '</div>';
 
@@ -126,6 +127,7 @@
     callback: function (message) {
       if ($('#achat_' + message.channel + ' .achat-user-box-' + message.data.user.uid).length == 0) {
         Drupal.behaviors.achat.addUser(message);
+        Drupal.attachBehaviors($('.achat_form .user-list li'));
       }
     }
   }
@@ -156,7 +158,7 @@
         // chat-log div is focused might be enough.
         $(chatID + ' .chat-log')[0].scrollTop = $(chatID + ' .chat-log')[0].scrollHeight;
 
-        Drupal.attachBehaviors();
+        Drupal.attachBehaviors($('.chat-log'));
       }
     }
   }

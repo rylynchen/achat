@@ -150,6 +150,7 @@ class Achat {
         ),
       ),
     );
+    drupal_alter('achat_create_socket', $this->type, $this->channel);
     nodejs_send_content_channel_token($this->channel, TRUE);
     nodejs_send_content_channel_message($message);
   }

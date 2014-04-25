@@ -181,18 +181,7 @@ function achat_block_configure($delta = '') {
         ),
       ),
     );
-    $form['achat']['db'] = array(
-      '#type' => 'fieldset',
-      '#title' => t('数据库'),
-      '#collapsible' => TRUE,
-      '#collapsed' => FALSE,
-      '#tree' => TRUE,
-    );
-    $form['achat']['db']['log'] = array(
-      '#type' => 'checkbox',
-      '#title' => t('存储聊天记录'),
-      '#default_value' => isset($blocks_settings[$type]['db']['log']) ? $blocks_settings[$type]['db']['log'] : $default_settings['db']['log'],
-    );
+    drupal_alter('achat_block_configure', $form, $type, $blocks_settings);
   }
   return $form;
 }
@@ -215,10 +204,8 @@ function achat_block_save($delta = '', $edit = array()) {
         'doc' => $edit['achat']['upload']['doc'],
         'doc_extensions' => $edit['achat']['upload']['doc_extensions'],
       ),
-      'db' => array(
-        'log' => $edit['achat']['db']['log'],
-      ),
     );
+    drupal_alter('achat_block_save', $settings[$type], $edit);
     variable_set('achat_blocks_settings', serialize($settings));
   }
 }
@@ -229,9 +216,12 @@ function achat_block_save($delta = '', $edit = array()) {
 function achat_block_view($delta = '') {
   $type = _achat_block_type($delta);
   if ($type !== FALSE && user_is_logged_in()) {
+    $access = TRUE;
     $path = current_path();
     $chat = new Achat($path, $type, array('configure' => _achat_block_configure($type)));
-    $block['content'] = $chat->render();
+    $output = '';
+    drupal_alter('achat_block_view', $chat->type, $chat->channel, $access, $output);
+    $block['content'] = $access ? $chat->render() : $output;
     return $block;
   }
 }
@@ -267,7 +257,7 @@ function achat_settings($type = NULL) {
  *
  * @param $to
  */
-function _achat_send_message($block_type, $channel, array $data, array $to) {
+function _achat_send_message($block_type, $channel, array $data, array $to, $checkall) {
   global $user;
   $configure = _achat_block_configure($block_type);
   $message = (object) array(
@@ -280,6 +270,7 @@ function _achat_send_message($block_type, $channel, array $data, array $to) {
       'to' => $to,
     ),
   );
+  // drupal_alter('achat_send_message', $block_type, $channel, $data, $to, $secret);
   nodejs_send_content_channel_message($message);
 }
 
@@ -353,7 +344,7 @@ function _achat_block_type($delta) {
  * Get achat block defualt configure.
  */
 function _achat_block_default_configure() {
-  return array(
+  $configure = array(
     'upload' => array(
       'upload_location' => 'achat/[channel]/[Y-m-d]',
       'image' => 0,
@@ -364,10 +355,9 @@ function _achat_block_default_configure() {
       'doc' => 0,
       'doc_extensions' => 'doc txt docx',
     ),
-    'db' => array(
-      'log' => 0,
-    ),
   );
+  drupal_alter('achat_block_default_configure', $configure);
+  return $configure;
 }
 
 /**
@@ -403,16 +393,29 @@ function achat_form($form, &$form_state, $channel, $user_ids = array(), $setting
       ),
     ),
   );
-  $checkall = '<div style="margin-top:10px;">全选/全不选<span style="float:right;""><input id="user_checkall" type="checkbox" name="users_all" checked="checked" /></span></div>';
+  // $checkall = '<div style="margin-top:10px;">全选/全不选<span style="float:right;""><input id="user_checkall" type="checkbox" name="users_all" checked="checked" /></span></div>';
+  $form['achat']['checkall'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('全选/全不选'),
+    '#default_value' => 1,
+    '#prefix' => '<div class="user-list">',
+    '#attributes' => array(
+      // 'name' => 'users_all',
+      // 'id' => 'user_checkall',
+      'style' => 'float:right;',
+    ),
+  );
   $form['achat']['users'] = array(
     '#tree' => TRUE,
-    '#prefix' => '<div class="user-list">' . $checkall . '<ul>',
+    // '#prefix' => '<div class="user-list">' . $checkall . '<ul>',
+    '#prefix' => '<ul>',
     '#suffix' => '</ul></div>',
   );
 
   $users = user_load_multiple($user_ids);
 
   foreach ($users as $user) {
+    if($user->uid == $GLOBALS['user']->uid) continue;
     $form['achat']['users'][$user->uid] = _achat_form_user_item($user);
   }
 
@@ -540,7 +543,8 @@ function achat_form_send_submit($form, &$form_state) {
       $to[] = $uid;
     }
   }
-  _achat_send_message($form_state['block_type'], $form_state['channel'], $data, array_unique($to));
+  // dpm($form_state);
+  _achat_send_message($form_state['block_type'], $form_state['channel'], $data, array_unique($to), $form_state['values']['checkall']);
 }
 
 /**
@@ -599,6 +603,7 @@ function achat_upload($_form_state, $upload_type) {
     'upload_type' => $upload_type,
     'block_configure' => _achat_block_configure($_form_state['block_type']),
     'to' => $to,
+    'checkall' => $_form_state['values']['checkall'],
   );
   $title = $upload_type == 'image' ? t('上传图片') : ($upload_type == 'video' ? t('上传视频') : t('上传文件'));
   drupal_set_title($title);
@@ -641,6 +646,7 @@ function achat_upload_form_submit($form, &$form_state) {
   if ($form_state['values']['fid'] != 0) {
     $file = file_load($form_state['values']['fid']);
     $file->status = FILE_STATUS_PERMANENT;
+    $file->display = '1';
     file_save($file);
 
     file_usage_add($file, 'achat', 'achat_image', 1);
@@ -649,7 +655,7 @@ function achat_upload_form_submit($form, &$form_state) {
       'type' => $form_state['upload_type'],
       'value' => $file
     );
-    _achat_send_message($form_state['block_type'], $form_state['channel'], $data, $form_state['to']);
+    _achat_send_message($form_state['block_type'], $form_state['channel'], $data, $form_state['to'], $form_state['checkall']);
   }
 }
 
