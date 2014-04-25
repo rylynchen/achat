@@ -1,0 +1,10 @@
+name = A Chat Database
+description = A drupal nodejs chat database.
+core = 7.x
+package = Achat
+
+dependencies[] = achat
+;dependencies[] = centity_achat
+;dependencies[] = centity_achatlog
+
+;configure = admin/config/achat/db

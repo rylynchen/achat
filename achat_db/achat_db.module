@@ -1,0 +1,228 @@
+<?php
+
+/**
+ * Implements hook_achat_block_configure_alter().
+ *
+ * @see achat_block_configure()
+ */
+function achat_db_achat_block_configure_alter(&$form, $type, $blocks_settings) {
+	$default_settings = _achat_block_default_configure();
+  $form['achat']['db'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('数据库'),
+    '#collapsible' => TRUE,
+    '#collapsed' => FALSE,
+    '#tree' => TRUE,
+  );
+  $form['achat']['db']['achat'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('存储聊天室'),
+    '#default_value' => isset($blocks_settings[$type]['db']['achat']) ? $blocks_settings[$type]['db']['achat'] : $default_settings['db']['achat'],
+  );
+  $form['achat']['db']['achatlog'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('存储聊天记录'),
+    '#default_value' => isset($blocks_settings[$type]['db']['achatlog']) ? $blocks_settings[$type]['db']['achatlog'] : $default_settings['db']['achatlog'],
+    '#states' => array(
+      'visible' => array(
+        'input[name="achat[db][achat]"]' => array('checked' => TRUE),
+      ),
+    ),
+  );
+  $form['achat']['db']['achatlog_load'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('用户进入时加载之前聊天记录'),
+    '#default_value' => isset($blocks_settings[$type]['db']['achatlog_load']) ? $blocks_settings[$type]['db']['achatlog_load'] : $default_settings['db']['achatlog_load'],
+    '#states' => array(
+      'visible' => array(
+        'input[name="achat[db][achatlog]"]' => array('checked' => TRUE),
+      ),
+    ),
+  );
+}
+
+/**
+ * Implements hook_achat_block_save_alter().
+ *
+ * @see achat_block_save()
+ */
+function achat_db_achat_block_save_alter(&$settings, $edit) {
+	$settings['db'] = array(
+		'achat' => $edit['achat']['db']['achat'],
+		'achatlog' => $edit['achat']['db']['achat'] && $edit['achat']['db']['achatlog'] ? 1 : 0,
+		'achatlog_load' => $edit['achat']['db']['achat'] && $edit['achat']['db']['achatlog'] && $edit['achat']['db']['achatlog_load'] ? 1 : 0,
+	);
+}
+
+/**
+ * Implements hook_achat_block_default_configure_alter().
+ *
+ * @see achat_block_default_configure()
+ */
+function achat_db_achat_block_default_configure_alter(&$configure) {
+	$configure['db'] = array(
+		'achat' => 0,
+		'achatlog' => 0,
+		'achatlog_load' => 0,
+	);
+}
+
+/**
+ * Implements hook_achat_create_socket_alter().
+ *
+ * @see achat_create_socket()
+ */
+function achat_db_achat_create_socket_alter($type, $channel) {
+	$blocks_settings = achat_settings('blocks');
+	if (isset($blocks_settings[$type]['db']['achat']) && $blocks_settings[$type]['db']['achat']) {
+		if ($achat = achat_db_load_achat_by_channel($channel)) {
+	  	// exist
+	  	$wrapper = entity_metadata_wrapper('centity', $achat);
+	  	$enter_user_ids = array();
+	  	foreach ($wrapper->field_achat_enter_users->value() as $user) {
+	  		$enter_user_ids[] = $user->uid;
+	  	}
+	  	if (!in_array($GLOBALS['user']->uid, $enter_user_ids)) {
+		  	array_push($enter_user_ids, $GLOBALS['user']->uid);
+		  	array_unique($enter_user_ids);
+		  	$wrapper->field_achat_enter_users->set($enter_user_ids);
+		  	$wrapper->save();
+	  	}
+		} else {
+	  	// not exist, to create
+	  	achat_db_create_achat($channel);
+		}
+	}
+}
+
+/**
+ * Create achat.
+ */
+function achat_db_create_achat($channel) {
+	$settings = array();
+	$achat = centity_create(array('type' => 'achat'));
+	$wrapper = entity_metadata_wrapper('centity', $achat);
+	$wrapper->field_achat_channel->set($channel);
+	$wrapper->field_achat_created->set(time());
+	drupal_alter('achat_db_create_achat', $achat, $wrapper, $channel);
+	$wrapper->save();
+}
+
+/**
+ * Load achat.
+ *
+ * @param $channel
+ */
+function achat_db_load_achat_by_channel($channel) {
+  $query = new EntityFieldQuery();
+  $query->entityCondition('entity_type', 'centity')
+    ->entityCondition('bundle', 'achat')
+    ->fieldCondition('field_achat_channel', 'value', $channel)
+    ->propertyOrderBy('cid', 'ASC')
+    ->range(0, 1);
+  $result = $query->execute();
+  if (isset($result['centity'])) {
+  	$cid = key($result['centity']);
+  	return centity_load($cid);
+  }
+  return FALSE;
+}
+
+/**
+ * Implements hook_achat_block_view_alter().
+ *
+ * @see achat_block_view()
+ */
+function achat_db_achat_block_view_alter($type, $channel, &$access, &$output) {
+	if ($achat = achat_db_load_achat_by_channel($channel)) {
+		$wrapper = entity_metadata_wrapper('centity', $achat);
+		if ($wrapper->field_achat_limit->value() == 1) {
+			$allow_user_ids = array();
+	  	foreach ($wrapper->field_achat_allow_users->value() as $user) {
+	  		$allow_user_ids[] = $user->uid;
+	  	}
+	  	$access = in_array($GLOBALS['user']->uid, $allow_user_ids);
+	  	$output = t('Cloesed');
+		}
+	}
+}
+
+/**
+ * Implements hook_achat_send_message_alter().
+ *
+ * @see achat_send_message()
+ */
+function achat_db_achat_send_message_alter($block_type, $channel, $data, $to) {
+	$configure = _achat_block_configure($block_type);
+	if (isset($configure['db']['achatlog']) && $configure['db']['achatlog']) {
+		if ($achat = achat_db_load_achat_by_channel($channel)) {
+			achat_db_create_achatlog($achat, $channel, $data, $to);
+		} else {
+			watchdog('achat_db', 'Create achat log fail, invalid channel %channel', array('%channel' => $channel), WATCHDOG_ERROR);
+		}
+	}
+}
+
+/**
+ * Create achat log.
+ *
+ * @param $achat
+ *
+ * @param $channel
+ *
+ * @param $data
+ *
+ * @param $to
+ */
+function achat_db_create_achatlog($achat, $channel, $data, $to) {
+	$settings = array();
+	$achatlog = centity_create(array('type' => 'achatlog'));
+	$wrapper = entity_metadata_wrapper('centity', $achatlog);
+	$wrapper->field_achat->set($achat->cid);
+	$wrapper->field_achatlog_sender->set($GLOBALS['user']->uid);
+	$wrapper->field_achatlog_type->set($data['type']);
+	switch ($data['type']) {
+		case 'text':
+			$wrapper->field_achatlog_text->set($data['value']);
+			break;
+		case 'image':
+		case 'video':
+		case 'doc':
+			$file = (array) $data['value'];
+			$items = array($file);
+			$wrapper->field_achatlog_file->set($file);
+			break;
+	}
+	$wrapper->field_achatlog_receiver->set($to);
+	$wrapper->field_achatlog_created->set(time());
+	drupal_alter('achat_db_create_achatlog', $achatlog, $wrapper, $achat, $channel, $data, $to);
+	$wrapper->save();
+}
+
+/**
+ * Implements hook_form_alter().
+ */
+function achat_db_form_alter(&$form, &$form_state, $form_id) {
+	if ($form_id == 'achat_form' 
+		&& isset($form_state['settings']['configure']['db']['achatlog_load']) 
+		&& $form_state['settings']['configure']['db']['achatlog_load'] 
+		&& isset($form_state['channel']) 
+		&& $achat = achat_db_load_achat_by_channel($form_state['channel'])) {
+
+		$output = '';
+	  $query = new EntityFieldQuery();
+	  $query->entityCondition('entity_type', 'centity')
+	    ->entityCondition('bundle', 'achatlog')
+	    ->fieldCondition('field_achat', 'target_id', $achat->cid)
+	    ->fieldOrderBy('field_achatlog_created', 'value', 'ASC');
+	  $result = $query->execute();
+	  // if (isset($result['centity'])) {
+	  // 	$cids = array_keys($result['centity']);
+	  // 	$logs = centity_load_multiple($cids);
+	  // 	$output = achat_db_logs_render();
+	  // }
+	  $form['achat']['log'] = array(
+	    '#markup' => '<div class="chat-log">' . $output . '</div>',
+	  );
+	}
+}
