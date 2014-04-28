@@ -61,8 +61,11 @@
 
       var markup = '<li class="achat-user-box-' + uid + '" class="achat-user-box first">' + picture + '<span class="username">' + name + '</span>' + form_item + '</li>';
 
-      $('#achat_' + message.channel + ' .user-list ul').append(markup);
+      var newElement = $(markup);
 
+      $(newElement).click(Drupal.behaviors.achat.checkboxChanged);
+      
+      $('#achat_' + message.channel + ' .user-list ul').append(newElement);
     },
 
     isAccepter: function(msg) {
@@ -85,6 +88,11 @@
   {
     var selector = response.data.selector;
     $(selector).val('').focus();
+  };
+
+  Drupal.ajax.prototype.commands.reloadBehaviors = function(ajax, response, status)
+  {
+    Drupal.attachBehaviors();
   };
 
 
@@ -127,16 +135,14 @@
     callback: function (message) {
       if ($('#achat_' + message.channel + ' .achat-user-box-' + message.data.user.uid).length == 0) {
         Drupal.behaviors.achat.addUser(message);
-        Drupal.attachBehaviors($('.achat_form .user-list li'));
       }
     }
   }
+
   Drupal.Nodejs.callbacks.nodejsChatMessageHandler = {
     callback: function(message) {
       var msg = message.data;
-      console.log(msg);
       if (Drupal.behaviors.achat.isAccepter(msg)) {
-        console.log(msg);
         var chatID = '#achat_' + message.channel;
 
         // Get current date, to display the time at which the message was sent.

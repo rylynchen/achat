@@ -256,22 +256,34 @@ function achat_settings($type = NULL) {
  * @param $msg
  *
  * @param $to
+ *
+ * @param $secret
  */
-function _achat_send_message($block_type, $channel, array $data, array $to, $checkall) {
+function _achat_send_message($block_type, $channel, array $data, array $to, $secret) {
   global $user;
   $configure = _achat_block_configure($block_type);
-  $message = (object) array(
-    'channel' => $channel,
-    'callback' => 'nodejsChatMessageHandler',
-    'data' => array(
-      'uid' => $user->uid,
-      'name' => $user->name,
-      'msg' => _achat_msg_render($data, $configure),
+  $msg = _achat_msg_render($data, $configure);
+  if ($msg) {
+    $message = (object) array(
+      'channel' => $channel,
+      'callback' => 'nodejsChatMessageHandler',
+      'data' => array(
+        'uid' => $user->uid,
+        'name' => $user->name,
+        'msg' => $msg,
+        'to' => $to,
+      ),
+    );
+    $params = array(
+      'block_type' => $block_type,
+      'channel' => $channel,
+      'data' => $data,
       'to' => $to,
-    ),
-  );
-  // drupal_alter('achat_send_message', $block_type, $channel, $data, $to, $secret);
-  nodejs_send_content_channel_message($message);
+      'secret' => $secret,
+    );
+    drupal_alter('achat_send_message', $params);
+    nodejs_send_content_channel_message($message);
+  }
 }
 
 /**
@@ -282,10 +294,11 @@ function _achat_send_message($block_type, $channel, array $data, array $to, $che
  * @param $configure
  */
 function _achat_msg_render($data, $configure) {
+  $msg = FALSE;
   if (isset($data['type']) && isset($data['value'])) {
     switch ($data['type']) {
       case 'text':
-        $msg = $data['value'];
+        $msg = empty($data['value']) ? $msg : $data['value'];
         break;
       case 'image':
         $file = $data['value'];
@@ -393,21 +406,17 @@ function achat_form($form, &$form_state, $channel, $user_ids = array(), $setting
       ),
     ),
   );
-  // $checkall = '<div style="margin-top:10px;">全选/全不选<span style="float:right;""><input id="user_checkall" type="checkbox" name="users_all" checked="checked" /></span></div>';
   $form['achat']['checkall'] = array(
     '#type' => 'checkbox',
     '#title' => t('全选/全不选'),
     '#default_value' => 1,
     '#prefix' => '<div class="user-list">',
     '#attributes' => array(
-      // 'name' => 'users_all',
-      // 'id' => 'user_checkall',
       'style' => 'float:right;',
     ),
   );
   $form['achat']['users'] = array(
     '#tree' => TRUE,
-    // '#prefix' => '<div class="user-list">' . $checkall . '<ul>',
     '#prefix' => '<ul>',
     '#suffix' => '</ul></div>',
   );
@@ -543,8 +552,7 @@ function achat_form_send_submit($form, &$form_state) {
       $to[] = $uid;
     }
   }
-  // dpm($form_state);
-  _achat_send_message($form_state['block_type'], $form_state['channel'], $data, array_unique($to), $form_state['values']['checkall']);
+  _achat_send_message($form_state['block_type'], $form_state['channel'], $data, array_unique($to), !$form_state['values']['checkall']);
 }
 
 /**
@@ -655,7 +663,7 @@ function achat_upload_form_submit($form, &$form_state) {
       'type' => $form_state['upload_type'],
       'value' => $file
     );
-    _achat_send_message($form_state['block_type'], $form_state['channel'], $data, $form_state['to'], $form_state['checkall']);
+    _achat_send_message($form_state['block_type'], $form_state['channel'], $data, $form_state['to'], !$form_state['checkall']);
   }
 }
 
