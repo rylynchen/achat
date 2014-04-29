@@ -1,0 +1,7 @@
+<?php
+/**
+ * @file
+ * Code for the centity_achat feature.
+ */
+
+include_once 'centity_achat.features.inc';

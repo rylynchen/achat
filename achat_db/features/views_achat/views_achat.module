@@ -1,0 +1,7 @@
+<?php
+/**
+ * @file
+ * Code for the views_achat feature.
+ */
+
+include_once 'views_achat.features.inc';
