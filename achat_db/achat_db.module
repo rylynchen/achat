@@ -1,6 +1,41 @@
 <?php
 
 /**
+ * Implements hook_menu().
+ */
+function achat_db_menu() {
+  $items['achat_db/%centity/ajax/export'] = array(
+    'page callback' => 'achat_db_ajax_export_callback',
+    'page arguments' => array(1),
+    'access arguments' => array('administer achat db'),
+    'file' => 'achat_db.export.inc',
+    'type' => MENU_CALLBACK,
+  );
+  return $items;
+}
+
+/**
+ * Implements hook_permission().
+ */
+function achat_db_permission() {
+  return array(
+    'administer achat db' => array(
+      'title' => t('Administer achat database info.'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_views_api().
+ */
+function achat_db_views_api() {
+  return array(
+    'api' => 3,
+    'path' => drupal_get_path('module', 'achat_db') . '/views',
+  );
+}
+
+/**
  * Implements hook_achat_block_configure_alter().
  *
  * @see achat_block_configure()
@@ -104,6 +139,7 @@ function achat_db_create_achat($channel) {
 	$wrapper = entity_metadata_wrapper('centity', $achat);
 	$wrapper->field_achat_channel->set($channel);
 	$wrapper->field_achat_created->set(time());
+	$wrapper->field_achat_enter_users->set(array($GLOBALS['user']->uid));
 	drupal_alter('achat_db_create_achat', $achat, $wrapper, $channel);
 	$wrapper->save();
 }
@@ -187,7 +223,7 @@ function achat_db_create_achatlog($achat, $params) {
 	$wrapper->field_achatlog_created->set(time());
 	if (isset($params['data']['type']) && isset($params['data']['value'])) {
 		$wrapper->field_achatlog_type->set($params['data']['type']);
-		switch ($data['type']) {
+		switch ($params['data']['type']) {
 			case 'text':
 				$wrapper->field_achatlog_text->set($params['data']['value']);
 				break;

@@ -4,7 +4,11 @@ core = 7.x
 package = Achat
 
 dependencies[] = achat
+dependencies[] = phpexcel
+; feature
 ;dependencies[] = centity_achat
 ;dependencies[] = centity_achatlog
+;dependencies[] = views_achat
 
-;configure = admin/config/achat/db
+files[] = views/achat_db.views.inc
+files[] = views/achat_db_handler_achat_db_export_log_field.inc

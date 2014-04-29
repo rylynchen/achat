@@ -8,8 +8,6 @@
 
 #configure
 	
-	0. admin/config/achat set block types num
+	0. admin/config/achat set block types number
 
-	1. admin/structure/block	set block configure
-
-	2.
+	1. admin/structure/block set block configure
